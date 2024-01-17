@@ -343,7 +343,7 @@ bool virt_set_guest(uint16_t guest_id)
 	}
 	cpu_spin_unlock_xrestore(&prtn_list_lock, exceptions);
 
-	return guest_id == HYP_CLNT_ID;
+	return false;
 }
 
 void virt_unset_guest(void)
