@@ -64,6 +64,9 @@ TEE_Result tee_rpmb_fs_raw_open(const char *fname, bool create,
 				struct tee_file_handle **fh);
 TEE_Result tee_rpmb_reinit(void);
 
+/* True if the normal world reported that no RPMB device exists */
+bool tee_rpmb_fs_no_device(void);
+
 /* Ger RPMB memory allocation statistics */
 TEE_Result rpmb_mem_stats(struct pta_stats_alloc *stats, bool reset);
 

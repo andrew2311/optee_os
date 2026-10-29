@@ -551,6 +551,23 @@ static size_t ree_fs_dirh_refcount;
 
 #ifdef CFG_REE_FS_INTEGRITY_RPMB
 static struct tee_file_handle *ree_fs_rpmb_fh;
+/* Insecure configuration only: no RPMB device, so no anchor */
+static bool ree_fs_no_anchor;
+
+static TEE_Result open_dirh_no_anchor(struct tee_fs_dirfile_dirh **dirh)
+{
+	TEE_Result res = TEE_SUCCESS;
+
+	if (!ree_fs_no_anchor) {
+		IMSG("WARNING (insecure configuration): REE FS without RPMB");
+		ree_fs_no_anchor = true;
+	}
+	res = tee_fs_dirfile_open(false, NULL, 0, &ree_dirf_ops, dirh);
+	if (res == TEE_ERROR_ITEM_NOT_FOUND)
+		res = tee_fs_dirfile_open(true, NULL, 0, &ree_dirf_ops, dirh);
+
+	return res;
+}
 
 static TEE_Result open_dirh(struct tee_fs_dirfile_dirh **dirh)
 {
@@ -559,7 +576,12 @@ static TEE_Result open_dirh(struct tee_fs_dirfile_dirh **dirh)
 	uint8_t *hashp = NULL;
 	const char fname[] = "dirfile.db.hash";
 
+	if (ree_fs_no_anchor)
+		return open_dirh_no_anchor(dirh);
+
 	res = tee_rpmb_fs_raw_open(fname, false, &ree_fs_rpmb_fh);
+	if (res && IS_ENABLED(CFG_INSECURE) && tee_rpmb_fs_no_device())
+		return open_dirh_no_anchor(dirh);
 	if (!res) {
 		size_t l = sizeof(hash);
 
@@ -631,6 +653,9 @@ static TEE_Result commit_dirh_writes(struct tee_fs_dirfile_dirh *dirh)
 {
 	TEE_Result res;
 	uint8_t hash[TEE_FS_HTREE_HASH_SIZE];
+
+	if (ree_fs_no_anchor)
+		return tee_fs_dirfile_commit_writes(dirh, NULL, NULL);
 
 	res = tee_fs_dirfile_commit_writes(dirh, hash, NULL);
 	if (res)

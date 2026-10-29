@@ -297,6 +297,9 @@ static struct tee_rpmb_ctx *rpmb_ctx;
 /* If set to true, don't try to access RPMB until rebooted */
 static bool rpmb_dead;
 
+/* Set if the last init found that the normal world has no RPMB device */
+static bool rpmb_no_dev;
+
 /*
  * Mutex to serialize the operations exported by this file.
  * It protects rpmb_ctx and prevents overlapping operations on eMMC devices with
@@ -1227,6 +1230,7 @@ static TEE_Result legacy_rpmb_init(void)
 		dev_info.rpmb_size_mult = 0;
 		dev_info.rel_wr_sec_c = 0;
 		res = tee_rpmb_get_dev_info(&dev_info);
+		rpmb_no_dev = res == TEE_ERROR_ITEM_NOT_FOUND;
 		if (res != TEE_SUCCESS)
 			return res;
 
@@ -1285,9 +1289,12 @@ static TEE_Result tee_rpmb_init(void)
 	struct rpmb_dev_info dev_info = { };
 	struct tee_rpmb_ctx cand = { };
 	bool have_cand = false;
+	bool have_dev = false;
 
 	if (rpmb_dead)
 		return TEE_ERROR_COMMUNICATION;
+
+	rpmb_no_dev = false;
 
 	if (!rpmb_ctx) {
 		rpmb_ctx = calloc(1, sizeof(struct tee_rpmb_ctx));
@@ -1333,6 +1340,8 @@ next:
 		if (res) {
 			if (!have_cand) {
 				DMSG("rpmb_probe_next error %#"PRIx32, res);
+				rpmb_no_dev = !have_dev &&
+					      res == TEE_ERROR_ITEM_NOT_FOUND;
 				return res;
 			}
 
@@ -1356,6 +1365,7 @@ next:
 			return res;
 		}
 
+		have_dev = true;
 		res = rpmb_set_dev_info(&dev_info);
 		if (res) {
 			DMSG("Invalid device info, looking for another device");
@@ -1391,6 +1401,11 @@ done:
 	rpmb_ctx->wr_cnt_synced = true;
 
 	return TEE_SUCCESS;
+}
+
+bool tee_rpmb_fs_no_device(void)
+{
+	return rpmb_no_dev;
 }
 
 TEE_Result tee_rpmb_reinit(void)
